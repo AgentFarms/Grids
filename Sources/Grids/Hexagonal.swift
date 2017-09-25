@@ -212,7 +212,11 @@ struct HexCubePoint: Hashable {
     }
 
     // Hashable
-    var hashValue: Int { return q.hashValue ^ r.hashValue ^ s.hashValue }
+    var hashValue: Int {
+        let hq = q.hashValue
+        let hr = r.hashValue
+        return hq ^ (hr + 0x9e3779b9 + (hq << 6) + (hq >> 2))
+    }
 }
 
 
@@ -233,24 +237,91 @@ func *(lhs: HexCubePoint, scale: Int) -> HexCubePoint {
     return HexCubePoint(q:lhs.q*scale, r:lhs.r*scale, s:lhs.s*scale)
 }
 
+enum HexAxisCombination: Equatable {
+    case rq
+    case rs
+    case qr
+    case qs
+    case sq
+    case sr
+
+    func isPermutation(of other: HexAxisCombination) -> Bool {
+        switch (self, other) {
+        case (.rq, .qr), (.rq, .rq), (.qr, .qr): return true
+        case (.rs, .sr), (.rs, .rs), (.sr, .sr): return true
+        case (.qs, .sq), (.qs, .qs), (.sq, .qr): return true
+        default: return false
+        }
+    }
+}
+
+enum HexTriangleOrientation {
+    case zeroAnchor
+    case sizeAnchor
+}
+
 enum HexGridShape {
     // Width, Height
-    case parallelogram(Int, Int)
-    case rectangular(Int, Int)
+    case parallelogram(Int, Int, HexAxisCombination)
+    case rectangular(Int)
     // Radius
     case hexagonal(Int)
     // Side size
-    case triangular(Int)
+    case triangular(Int, HexAxisCombination)
 }
 
-class HexGrid<T> {
-    typealias Cell = T
+class HexParallelogramShape: GridShape {
     typealias Location = HexCubePoint
-    let shape: HexGridShape
-    let cells: [Location:Cell]
+    
+    let width: Int
+    let height: Int
+    let axisCombination: HexAxisCombination
 
-    init(shape: HexGridShape) {
-        self.shape = shape
-        self.cells = [:]
+    init(width: Int, height: Int, axisCombination: HexAxisCombination) {
+        self.width = width
+        self.height = height
+        self.axisCombination = axisCombination
+    }
+
+    var locations: AnyCollection<Location> {
+        return AnyCollection(
+            (0...width).lazy.flatMap {
+                i in (0...height).lazy.map { j in
+                    switch self.axisCombination {
+                    case .qr, .rq: return HexCubePoint(q:   i, r:   j, s:-i-j) 
+                    case .qs, .sq: return HexCubePoint(q:   i, r:-i-j, s:   j) 
+                    case .rs, .sr: return HexCubePoint(q:-i-j, r:   i, s:   j) 
+                    }
+                }
+            }
+        )
+    }
+
+    var origin: Location { return HexCubePoint(q: 0, r: 0, s: 0)}
+
+    func contains(location: Location) -> Bool {
+        switch self.axisCombination {
+        case .qr, .rq: return (0...width).contains(location.q)
+                                && (0...height).contains(location.r)
+        case .qs, .sq: return (0...width).contains(location.q)
+                                && (0...height).contains(location.s)
+        case .rs, .sr: return (0...width).contains(location.r)
+                                && (0...height).contains(location.s)
+         
     }
 }
+
+class HexTriangleShape {
+    typealias Location = HexCubePoint
+    // TODO: Not implemented
+}
+
+class HexHexagonalShape {
+    typealias Location = HexCubePoint
+    // TODO: Not implemented
+}
+
+class HexRectangularShape {
+    typealias Location = HexCubePoint
+}
+
